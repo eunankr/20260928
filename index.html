@@ -95,7 +95,8 @@
   </div>
 </div>
 
-<video id="vid" playsinline muted autoplay style="display:none"></video>
+<video id="vid" playsinline webkit-playsinline muted autoplay
+  style="position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1"></video>
 
 <script>
 (() => {
@@ -243,6 +244,8 @@ if (gl) {
 
 /* ---------- 상태 ---------- */
 const video = document.getElementById('vid');
+const buf = document.createElement('canvas');
+const bctx = buf.getContext('2d', { willReadFrequently:false });
 const state = { src:null, srcW:0, srcH:0, facing:'environment', paused:false, compare:false, split:0.5,
                 type:'deuteranopia', sev:0.6, stream:null, dirty:false };
 
@@ -288,12 +291,20 @@ function frame() {
   resize();
   gl.viewport(0, 0, canvas.width, canvas.height);
   if (state.src === video) {
-    if (video.readyState >= 2 && !state.paused) {
-      state.srcW = video.videoWidth; state.srcH = video.videoHeight;
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
-    } else if (video.readyState < 2) return;
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh || video.readyState < 2) return;
+    if (!state.paused) {
+      // 모바일 브라우저의 영상→WebGL 직접 업로드 버그를 피하기 위해 2D 캔버스를 거쳐 업로드
+      const k = Math.min(1, 1280 / Math.max(vw, vh));
+      const w = Math.round(vw * k), h = Math.round(vh * k);
+      if (buf.width !== w || buf.height !== h) { buf.width = w; buf.height = h; }
+      bctx.drawImage(video, 0, 0, w, h);
+      state.srcW = w; state.srcH = h;
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      state.gotFrame = true;
+    }
   } else if (state.dirty) {
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, state.src);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, state.src);
     state.dirty = false;
   }
   fit();
@@ -317,10 +328,17 @@ async function startCam() {
     state.stream = await navigator.mediaDevices.getUserMedia({
       audio:false, video:{ facingMode:{ ideal:state.facing }, width:{ ideal:1280 }, height:{ ideal:720 } }
     });
+    video.setAttribute('playsinline', ''); video.muted = true;
     video.srcObject = state.stream;
     await video.play();
-    state.src = video; state.paused = false; setPauseUI();
+    state.src = video; state.paused = false; state.gotFrame = false; setPauseUI();
     document.getElementById('intro').style.display = 'none';
+    setTimeout(() => {
+      if (state.src === video && !state.gotFrame) {
+        document.getElementById('intro').style.display = 'flex';
+        msg.textContent = '카메라는 켜졌지만 영상이 들어오지 않습니다. 브라우저를 Chrome(안드로이드) 또는 Safari(아이폰)로 바꿔 다시 시도하세요.';
+      }
+    }, 3000);
     return true;
   } catch (e) {
     const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
