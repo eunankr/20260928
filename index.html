@@ -252,7 +252,7 @@ const state = { src:null, srcW:0, srcH:0, facing:'environment', paused:false, co
 function applyType() {
   if (!gl) return;
   const t = state.type;
-  const kind = t.startsWith('protan') ? 'protan' : t.startsWith('deutan') ? 'deutan' : t.startsWith('tritan') ? 'tritan' : null;
+  const kind = t.startsWith('protan') ? 'protan' : t.startsWith('deuter') ? 'deutan' : t.startsWith('tritan') ? 'tritan' : null;
   if (t === 'normal') { gl.uniform1i(loc.uMode, 0); }
   else if (t === 'achromatopsia') { gl.uniform1i(loc.uMode, 3); }
   else if (t.endsWith('opia')) {
@@ -413,7 +413,7 @@ document.addEventListener('visibilitychange', () => {
   else if (state.src === video) startCam();
 });
 
-if (gl) { applyType(); requestAnimationFrame(frame); }
+if (gl) { requestAnimationFrame(frame); applyType(); }
 })();
 </script>
 </body>
