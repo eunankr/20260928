@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>색각이상 체험</title>
+<style>
+  :root { --b:#000; --w:#fff; }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; background:var(--b); color:var(--w); overflow:hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; }
+  body { display:flex; flex-direction:column; height:100%;
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+
+  #stage { position:relative; flex:1; min-height:0; }
+  canvas { display:block; width:100%; height:100%; touch-action:none; }
+  .tag { position:absolute; top:12px; font-size:13px; padding:4px 8px; background:var(--b); color:var(--w);
+    border:1px solid var(--w); display:none; pointer-events:none; }
+  #tagL { left:12px; } #tagR { right:12px; }
+  body.compare .tag { display:block; }
+
+  #intro { position:absolute; inset:0; background:var(--b); display:flex; flex-direction:column;
+    justify-content:center; padding:32px 28px; gap:20px; }
+  #intro h1 { font-size:34px; font-weight:800; letter-spacing:-0.02em; line-height:1.15; }
+  #intro p { font-size:15px; line-height:1.6; max-width:34em; }
+  #intro .small { font-size:13px; opacity:.7; }
+  #intro .row { display:flex; gap:10px; margin-top:8px; }
+  #msg { font-size:14px; line-height:1.5; min-height:1em; }
+
+  #panel { background:var(--b); border-top:1px solid var(--w); padding:12px 14px 14px; display:flex; flex-direction:column; gap:10px; }
+  #desc { font-size:13px; line-height:1.5; min-height:3em; }
+  select { width:100%; font:inherit; font-size:16px; font-weight:700; color:var(--w); background:var(--b);
+    border:1px solid var(--w); border-radius:0; padding:10px 12px; -webkit-appearance:none; appearance:none;
+    background-image:linear-gradient(45deg,transparent 50%,#fff 50%),linear-gradient(135deg,#fff 50%,transparent 50%);
+    background-position:calc(100% - 20px) 50%, calc(100% - 14px) 50%; background-size:6px 6px; background-repeat:no-repeat; }
+  #sevRow { display:flex; align-items:center; gap:12px; font-size:14px; }
+  #sevRow.hidden { display:none; }
+  #sevVal { width:3.2em; text-align:right; font-variant-numeric:tabular-nums; }
+  input[type=range] { flex:1; -webkit-appearance:none; appearance:none; height:28px; background:transparent; }
+  input[type=range]::-webkit-slider-runnable-track { height:2px; background:var(--w); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; margin-top:-10px; background:var(--w); border:2px solid var(--b); border-radius:50%; }
+  input[type=range]::-moz-range-track { height:2px; background:var(--w); }
+  input[type=range]::-moz-range-thumb { width:18px; height:18px; background:var(--w); border:2px solid var(--b); border-radius:50%; }
+
+  .btns { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  button, .filebtn { font:inherit; font-size:14px; color:var(--w); background:var(--b); border:1px solid var(--w);
+    border-radius:0; padding:11px 4px; text-align:center; cursor:pointer; user-select:none; }
+  button.on { background:var(--w); color:var(--b); font-weight:700; }
+  button.primary { background:var(--w); color:var(--b); font-weight:700; padding:14px 22px; font-size:16px; }
+  button:focus-visible, select:focus-visible, .filebtn:focus-within { outline:2px solid var(--w); outline-offset:2px; }
+  input[type=file] { display:none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl"></canvas>
+  <div class="tag" id="tagL">원본</div>
+  <div class="tag" id="tagR">변환</div>
+
+  <div id="intro">
+    <h1>같은 세상,<br>다른 색</h1>
+    <p>카메라에 비친 장면을 색각이상 유형별로 변환해 보여줍니다. 어떤 색이 서로 구별되지 않는지 확인하는 도구이며, 당사자가 실제로 느끼는 지각과 똑같지는 않습니다.</p>
+    <p class="small">정확도를 위해 야간 모드, True Tone, 블루라이트 필터를 끄고 사용하세요. 영상은 기기 밖으로 전송되지 않습니다.</p>
+    <div class="row">
+      <button class="primary" id="startBtn">카메라 켜기</button>
+      <label class="filebtn" style="padding:14px 22px;font-size:16px;">사진 불러오기<input type="file" accept="image/*" id="file0"></label>
+    </div>
+    <div id="msg"></div>
+  </div>
+</div>
+
+<div id="panel">
+  <select id="type" aria-label="유형 선택">
+    <option value="normal">정상 색각</option>
+    <option value="protanopia">제1색맹 (적색맹)</option>
+    <option value="protanomaly">제1색약 (적색약)</option>
+    <option value="deuteranopia" selected>제2색맹 (녹색맹)</option>
+    <option value="deuteranomaly">제2색약 (녹색약)</option>
+    <option value="tritanopia">제3색맹 (청황색맹)</option>
+    <option value="tritanomaly">제3색약 (청황색약)</option>
+    <option value="achromatopsia">전색맹</option>
+  </select>
+  <div id="sevRow" class="hidden">
+    <span>정도</span>
+    <input type="range" id="sev" min="10" max="100" step="1" value="60" aria-label="정도">
+    <span id="sevVal">60%</span>
+  </div>
+  <div id="desc"></div>
+  <div class="btns">
+    <button id="cmpBtn">비교</button>
+    <button id="pauseBtn">정지</button>
+    <button id="flipBtn">전환</button>
+    <label class="filebtn">사진<input type="file" accept="image/*" id="file1"></label>
+  </div>
+</div>
+
+<video id="vid" playsinline webkit-playsinline muted autoplay
+  style="position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1"></video>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- 유형 설명 ---------- */
+const DESC = {
+  normal:        '세 종류의 원뿔세포(L·M·S)가 모두 정상 작동하는 상태. 비교 기준.',
+  protanopia:    'L(적색) 원뿔세포가 없음. 빨강과 초록, 빨강과 검정이 잘 구별되지 않고 빨간색이 어둡게 보임.',
+  protanomaly:   'L(적색) 원뿔세포의 감도가 초록 쪽으로 치우침. 정도가 심할수록 제1색맹에 가까워짐.',
+  deuteranopia:  'M(녹색) 원뿔세포가 없음. 빨강·초록·갈색·주황이 서로 비슷하게 보임.',
+  deuteranomaly: 'M(녹색) 원뿔세포의 감도가 빨강 쪽으로 치우침. 색각이상 중 가장 흔한 유형.',
+  tritanopia:    'S(청색) 원뿔세포가 없음. 파랑과 초록, 노랑과 분홍·흰색이 혼동됨. 매우 드묾.',
+  tritanomaly:   'S(청색) 원뿔세포의 감도가 약함. 청색·황색 계열의 구별이 어려워짐.',
+  achromatopsia: '원뿔세포가 기능하지 않아 밝기만 구별함. 실제로는 눈부심과 시력 저하도 동반되는 드문 유형.'
+};
+
+/* ---------- 색 변환 행렬 (선형 RGB, 행 우선) ----------
+   색약: Machado, Oliveira & Fernandes (2009), 정도 0.1 단위
+   색맹: Brettel, Viénot & Mollon (1997), 두 반평면 투영 (Viénot 1999 계수 기반, DaltonLens 구현값) */
+const I3 = [1,0,0, 0,1,0, 0,0,1];
+const MACHADO = {
+  protan: [I3,
+    [0.856167,0.182038,-0.038205, 0.029342,0.955115,0.015544, -0.002880,-0.001563,1.004443],
+    [0.734766,0.334872,-0.069637, 0.051840,0.919198,0.028963, -0.004928,-0.004209,1.009137],
+    [0.630323,0.465641,-0.095964, 0.069181,0.890046,0.040773, -0.006308,-0.007724,1.014032],
+    [0.539009,0.579343,-0.118352, 0.082546,0.866121,0.051332, -0.007136,-0.011959,1.019095],
+    [0.458064,0.679578,-0.137642, 0.092785,0.846313,0.060902, -0.007494,-0.016807,1.024301],
+    [0.385450,0.769005,-0.154455, 0.100526,0.829802,0.069673, -0.007442,-0.022190,1.029632],
+    [0.319627,0.849633,-0.169261, 0.106241,0.815969,0.077790, -0.007025,-0.028051,1.035076],
+    [0.259411,0.923008,-0.182420, 0.110296,0.804340,0.085364, -0.006276,-0.034346,1.040622],
+    [0.203876,0.990338,-0.194214, 0.112975,0.794542,0.092483, -0.005222,-0.041043,1.046265],
+    [0.152286,1.052583,-0.204868, 0.114503,0.786281,0.099216, -0.003882,-0.048116,1.051998]],
+  deutan: [I3,
+    [0.866435,0.177704,-0.044139, 0.049567,0.939063,0.011370, -0.003453,0.007233,0.996220],
+    [0.760729,0.319078,-0.079807, 0.090568,0.889315,0.020117, -0.006027,0.013325,0.992702],
+    [0.675425,0.433850,-0.109275, 0.125303,0.847755,0.026942, -0.007950,0.018572,0.989378],
+    [0.605511,0.528560,-0.134071, 0.155318,0.812366,0.032316, -0.009376,0.023176,0.986200],
+    [0.547494,0.607765,-0.155259, 0.181692,0.781742,0.036566, -0.010410,0.027275,0.983136],
+    [0.498864,0.674741,-0.173604, 0.205199,0.754872,0.039929, -0.011131,0.030969,0.980162],
+    [0.457771,0.731899,-0.189670, 0.226409,0.731012,0.042579, -0.011595,0.034333,0.977261],
+    [0.422823,0.781057,-0.203881, 0.245752,0.709602,0.044646, -0.011843,0.037423,0.974421],
+    [0.392952,0.823610,-0.216562, 0.263559,0.690210,0.046232, -0.011910,0.040281,0.971630],
+    [0.367322,0.860646,-0.227968, 0.280085,0.672501,0.047413, -0.011820,0.042940,0.968881]],
+  tritan: [I3,
+    [0.926670,0.092514,-0.019184, 0.021191,0.964503,0.014306, 0.008437,0.054813,0.936750],
+    [0.895720,0.133330,-0.029050, 0.029997,0.945400,0.024603, 0.013027,0.104707,0.882266],
+    [0.905871,0.127791,-0.033662, 0.026856,0.941251,0.031893, 0.013410,0.148296,0.838294],
+    [0.948035,0.089490,-0.037526, 0.014364,0.946792,0.038844, 0.010853,0.193991,0.795156],
+    [1.017277,0.027029,-0.044306, -0.006113,0.958479,0.047634, 0.006379,0.248708,0.744913],
+    [1.104996,-0.046633,-0.058363, -0.032137,0.971635,0.060503, 0.001336,0.317922,0.680742],
+    [1.193214,-0.109812,-0.083402, -0.058496,0.979410,0.079086, -0.002346,0.403492,0.598854],
+    [1.257728,-0.139648,-0.118081, -0.078003,0.975409,0.102594, -0.003316,0.501214,0.502102],
+    [1.278864,-0.125333,-0.153531, -0.084748,0.957674,0.127074, -0.000989,0.601151,0.399838],
+    [1.255528,-0.076749,-0.178779, -0.078411,0.930809,0.147602, 0.004733,0.691367,0.303900]]
+};
+const BRETTEL = {
+  protan: { m1:[0.14510,1.20165,-0.34675, 0.10447,0.85316,0.04237, 0.00429,-0.00603,1.00174],
+            m2:[0.14115,1.16782,-0.30897, 0.10495,0.85730,0.03776, 0.00431,-0.00586,1.00155],
+            n:[0.00048,0.00416,-0.00464] },
+  deutan: { m1:[0.36198,0.86755,-0.22953, 0.26099,0.64512,0.09389, -0.01975,0.02686,0.99289],
+            m2:[0.37009,0.88540,-0.25549, 0.25767,0.63782,0.10451, -0.01950,0.02741,0.99209],
+            n:[-0.00293,-0.00645,0.00938] },
+  tritan: { m1:[1.01354,0.14268,-0.15622, -0.01181,0.87561,0.13619, 0.07707,0.81208,0.11085],
+            m2:[0.93337,0.19999,-0.13336, 0.05809,0.82565,0.11626, -0.37923,1.13825,0.24098],
+            n:[0.03960,-0.02831,-0.01129] }
+};
+function machadoAt(kind, s) {           // s: 0..1, 0.1 단위 사이는 선형 보간
+  const tbl = MACHADO[kind], x = Math.max(0, Math.min(1, s)) * 10;
+  const i = Math.min(9, Math.floor(x)), f = x - i, a = tbl[i], b = tbl[i + 1];
+  return a.map((v, k) => v + (b[k] - v) * f);
+}
+
+/* ---------- WebGL ---------- */
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl', { premultipliedAlpha:false, preserveDrawingBuffer:false });
+const msg = document.getElementById('msg');
+if (!gl) { msg.textContent = '이 브라우저는 WebGL을 지원하지 않습니다. 최신 Safari 또는 Chrome에서 열어 주세요.'; }
+
+const VS = `
+attribute vec2 p;
+varying vec2 uv;
+uniform vec2 uScale, uOff;
+void main(){
+  vec2 t = p * 0.5 + 0.5;
+  uv = (t - 0.5) * uScale + 0.5 + uOff;
+  gl_Position = vec4(p, 0.0, 1.0);
+}`;
+const FS = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2 uv;
+uniform sampler2D tex;
+uniform int uMode;          // 0 정상, 1 행렬, 2 Brettel, 3 전색맹
+uniform mat3 uM1, uM2;
+uniform vec3 uN;
+uniform float uSplit;       // 비교 경계(px), 음수면 비활성
+uniform float uMirror;
+vec3 toLin(vec3 c){ return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)); }
+vec3 toSrgb(vec3 c){ c = clamp(c, 0.0, 1.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(vec3(0.0031308), c)); }
+void main(){
+  vec2 q = uv; if (uMirror > 0.5) q.x = 1.0 - q.x;
+  vec3 src = texture2D(tex, q).rgb;
+  float fx = gl_FragCoord.x;
+  if (uSplit >= 0.0) {
+    if (abs(fx - uSplit) < 1.5) { gl_FragColor = vec4(1.0); return; }
+    if (fx < uSplit) { gl_FragColor = vec4(src, 1.0); return; }
+  }
+  vec3 c = toLin(src), o = c;
+  if (uMode == 1) o = c * uM1;
+  else if (uMode == 2) o = (dot(c, uN) >= 0.0) ? c * uM1 : c * uM2;
+  else if (uMode == 3) o = vec3(dot(c, vec3(0.2126, 0.7152, 0.0722)));
+  gl_FragColor = vec4(toSrgb(o), 1.0);
+}`;
+
+let prog, loc = {}, tex;
+function sh(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+if (gl) {
+  prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog); gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pa = gl.getAttribLocation(prog, 'p');
+  gl.enableVertexAttribArray(pa); gl.vertexAttribPointer(pa, 2, gl.FLOAT, false, 0, 0);
+  ['uScale','uOff','uMode','uM1','uM2','uN','uSplit','uMirror','tex'].forEach(n => loc[n] = gl.getUniformLocation(prog, n));
+  tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.uniform1i(loc.tex, 0);
+}
+
+/* ---------- 상태 ---------- */
+const video = document.getElementById('vid');
+const buf = document.createElement('canvas');
+const bctx = buf.getContext('2d', { willReadFrequently:false });
+const state = { src:null, srcW:0, srcH:0, facing:'environment', paused:false, compare:false, split:0.5,
+                type:'deuteranopia', sev:0.6, stream:null, dirty:false };
+
+function applyType() {
+  if (!gl) return;
+  const t = state.type;
+  const kind = t.startsWith('protan') ? 'protan' : t.startsWith('deutan') ? 'deutan' : t.startsWith('tritan') ? 'tritan' : null;
+  if (t === 'normal') { gl.uniform1i(loc.uMode, 0); }
+  else if (t === 'achromatopsia') { gl.uniform1i(loc.uMode, 3); }
+  else if (t.endsWith('opia')) {
+    const b = BRETTEL[kind];
+    gl.uniform1i(loc.uMode, 2);
+    gl.uniformMatrix3fv(loc.uM1, false, new Float32Array(b.m1));   // 행 우선 데이터 + (v * M) 곱 = M·v
+    gl.uniformMatrix3fv(loc.uM2, false, new Float32Array(b.m2));
+    gl.uniform3fv(loc.uN, new Float32Array(b.n));
+  } else {
+    gl.uniform1i(loc.uMode, 1);
+    gl.uniformMatrix3fv(loc.uM1, false, new Float32Array(machadoAt(kind, state.sev)));
+  }
+  document.getElementById('desc').textContent = DESC[t];
+  document.getElementById('sevRow').classList.toggle('hidden', !t.endsWith('anomaly'));
+}
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
+
+function fit() {  // 화면을 꽉 채우도록(cover) 텍스처 좌표 조정
+  const cw = canvas.width, ch = canvas.height;
+  if (!state.srcW || !cw) return;
+  const ca = cw / ch, sa = state.srcW / state.srcH;
+  let sx = 1, sy = 1;
+  if (sa > ca) sx = ca / sa; else sy = sa / ca;
+  gl.uniform2f(loc.uScale, sx, sy);
+  gl.uniform2f(loc.uOff, 0, 0);
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  if (!gl || !state.src) return;
+  resize();
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  if (state.src === video) {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh || video.readyState < 2) return;
+    if (!state.paused) {
+      // 모바일 브라우저의 영상→WebGL 직접 업로드 버그를 피하기 위해 2D 캔버스를 거쳐 업로드
+      const k = Math.min(1, 1280 / Math.max(vw, vh));
+      const w = Math.round(vw * k), h = Math.round(vh * k);
+      if (buf.width !== w || buf.height !== h) { buf.width = w; buf.height = h; }
+      bctx.drawImage(video, 0, 0, w, h);
+      state.srcW = w; state.srcH = h;
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      state.gotFrame = true;
+    }
+  } else if (state.dirty) {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, state.src);
+    state.dirty = false;
+  }
+  fit();
+  gl.uniform1f(loc.uMirror, (state.src === video && state.facing === 'user') ? 1 : 0);
+  gl.uniform1f(loc.uSplit, state.compare ? state.split * canvas.width : -1);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+/* ---------- 카메라 / 사진 ---------- */
+function stopCam() {
+  if (state.stream) { state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
+}
+async function startCam() {
+  msg.textContent = '';
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    msg.textContent = '카메라를 사용할 수 없습니다. https 주소로 접속했는지 확인하거나, 사진 불러오기를 사용하세요.';
+    return false;
+  }
+  stopCam();
+  try {
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      audio:false, video:{ facingMode:{ ideal:state.facing }, width:{ ideal:1280 }, height:{ ideal:720 } }
+    });
+    video.setAttribute('playsinline', ''); video.muted = true;
+    video.srcObject = state.stream;
+    await video.play();
+    state.src = video; state.paused = false; state.gotFrame = false; setPauseUI();
+    document.getElementById('intro').style.display = 'none';
+    setTimeout(() => {
+      if (state.src === video && !state.gotFrame) {
+        document.getElementById('intro').style.display = 'flex';
+        msg.textContent = '카메라는 켜졌지만 영상이 들어오지 않습니다. 브라우저를 Chrome(안드로이드) 또는 Safari(아이폰)로 바꿔 다시 시도하세요.';
+      }
+    }, 3000);
+    return true;
+  } catch (e) {
+    const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+    msg.textContent = denied
+      ? '카메라 권한이 거부되었습니다. 브라우저 설정에서 이 사이트의 카메라를 허용한 뒤 다시 누르세요.'
+      : '카메라를 시작하지 못했습니다(' + (e && e.name || '오류') + '). 사진 불러오기를 사용하세요.';
+    return false;
+  }
+}
+function loadImage(file) {
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    stopCam();
+    const max = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    let src = img, w = img.naturalWidth, h = img.naturalHeight;
+    const lim = Math.min(max, 2048);
+    if (w > lim || h > lim) {                       // 큰 사진은 축소
+      const k = lim / Math.max(w, h), c = document.createElement('canvas');
+      c.width = Math.round(w * k); c.height = Math.round(h * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      src = c; w = c.width; h = c.height;
+    }
+    state.src = src; state.srcW = w; state.srcH = h; state.dirty = true;
+    state.paused = false; setPauseUI();
+    document.getElementById('intro').style.display = 'none';
+    URL.revokeObjectURL(img.src);
+  };
+  img.onerror = () => { msg.textContent = '이 사진 형식을 열 수 없습니다. JPG 또는 PNG를 사용하세요.'; };
+  img.src = URL.createObjectURL(file);
+}
+
+/* ---------- UI ---------- */
+const $ = id => document.getElementById(id);
+function setPauseUI() {
+  $('pauseBtn').textContent = state.paused ? '재생' : '정지';
+  $('pauseBtn').classList.toggle('on', state.paused);
+}
+$('startBtn').addEventListener('click', startCam);
+$('file0').addEventListener('change', e => { loadImage(e.target.files[0]); e.target.value = ''; });
+$('file1').addEventListener('change', e => { loadImage(e.target.files[0]); e.target.value = ''; });
+$('type').addEventListener('change', e => { state.type = e.target.value; applyType(); });
+$('sev').addEventListener('input', e => {
+  state.sev = e.target.value / 100; $('sevVal').textContent = e.target.value + '%'; applyType();
+});
+$('cmpBtn').addEventListener('click', () => {
+  state.compare = !state.compare;
+  $('cmpBtn').classList.toggle('on', state.compare);
+  document.body.classList.toggle('compare', state.compare);
+});
+$('pauseBtn').addEventListener('click', () => {
+  if (state.src !== video) return;
+  state.paused = !state.paused; setPauseUI();
+});
+$('flipBtn').addEventListener('click', async () => {
+  state.facing = state.facing === 'environment' ? 'user' : 'environment';
+  await startCam();
+});
+
+function setSplit(clientX) {
+  const r = canvas.getBoundingClientRect();
+  state.split = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+}
+let dragging = false;
+canvas.addEventListener('pointerdown', e => { if (!state.compare) return; dragging = true; canvas.setPointerCapture(e.pointerId); setSplit(e.clientX); });
+canvas.addEventListener('pointermove', e => { if (dragging) setSplit(e.clientX); });
+canvas.addEventListener('pointerup', () => { dragging = false; });
+canvas.addEventListener('pointercancel', () => { dragging = false; });
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { if (state.src === video) stopCam(); }
+  else if (state.src === video) startCam();
+});
+
+if (gl) { applyType(); requestAnimationFrame(frame); }
+})();
+</script>
+</body>
+</html>
